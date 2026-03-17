@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -54,12 +53,12 @@ func (pr PullRequest) CloneURL(sshHost string) string {
 	return pr.RepoURL()
 }
 
-// ListPendingPRs fetches all open PRs where the authenticated user is a
-// requested reviewer across all repositories, filtering out PR numbers
-// already present in the processed sync.Map.
+// ListReviewRequestedPRs fetches all open PRs where the authenticated user is a
+// requested reviewer across all repositories.
 //
 // Uses gh search prs so it works from any directory without a local git context.
-func ListPendingPRs(ctx context.Context, exec Executor, processed *sync.Map) ([]PullRequest, error) {
+// Filtering (e.g. skipping already-processed PRs) is the caller's responsibility.
+func ListReviewRequestedPRs(ctx context.Context, exec Executor) ([]PullRequest, error) {
 	out, err := exec.Run(ctx,
 		"gh", "search", "prs",
 		"--review-requested=@me",
@@ -74,14 +73,7 @@ func ListPendingPRs(ctx context.Context, exec Executor, processed *sync.Map) ([]
 	if err := json.Unmarshal(out, &all); err != nil {
 		return nil, fmt.Errorf("parse gh search prs output: %w", err)
 	}
-
-	pending := make([]PullRequest, 0, len(all))
-	for _, pr := range all {
-		if _, done := processed.Load(pr.Number); !done {
-			pending = append(pending, pr)
-		}
-	}
-	return pending, nil
+	return all, nil
 }
 
 // CommentAuthor holds the author of a PR comment.
@@ -116,6 +108,21 @@ func FetchPRComments(ctx context.Context, exec Executor, prNumber int, nameWithO
 		return nil, fmt.Errorf("parse comments for PR #%d: %w", prNumber, err)
 	}
 	return result.Comments, nil
+}
+
+// FindLastWatsonComment returns the most recent comment authored by username,
+// or nil if the user has no comments on the PR.
+func FindLastWatsonComment(comments []Comment, username string) *Comment {
+	var last *Comment
+	for i := range comments {
+		c := &comments[i]
+		if c.Author.Login == username {
+			if last == nil || c.CreatedAt.After(last.CreatedAt) {
+				last = c
+			}
+		}
+	}
+	return last
 }
 
 // FindMentionAfter returns the first comment that mentions @username posted after

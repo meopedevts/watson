@@ -46,23 +46,59 @@ func NewReviewer(cfg *config.Config, exec ghpkg.Executor, logger *slog.Logger) *
 	}
 }
 
-// ProcessPendingPRs is called on every ticker tick. It cleans up stale cache
-// entries, lists pending PRs, launches a goroutine for each one, then checks
-// reviewed PRs for new @mentions. Per-PR errors are logged but do not abort the loop.
+// ProcessPendingPRs is called on every ticker tick. It:
+//  1. Cleans up stale cache entries
+//  2. Fetches all open review-requested PRs
+//  3. For uncached PRs, checks if Watson has a previous comment:
+//     - If yes: recovers state into the cache so processMentionedPRs can detect
+//       any pending @mention (handles the restart/redeploy case)
+//     - If no: queues for first-time review
+//  4. Reviews first-time PRs in parallel
+//  5. Checks all cached PRs (including newly recovered) for @mentions
 func (r *Reviewer) ProcessPendingPRs(ctx context.Context) error {
 	r.cleanupStaleRecords()
 
-	prs, err := ghpkg.ListPendingPRs(ctx, r.executor, r.processed)
+	prs, err := ghpkg.ListReviewRequestedPRs(ctx, r.executor)
 	if err != nil {
 		return fmt.Errorf("list PRs: %w", err)
 	}
 
-	if len(prs) == 0 {
-		r.logger.Info("no pending PRs found")
+	var firstTimePRs []ghpkg.PullRequest
+	for _, pr := range prs {
+		if _, cached := r.processed.Load(pr.Number); cached {
+			continue // already in cache; processMentionedPRs handles it
+		}
+
+		// Uncached PR: check if Watson has reviewed it before (e.g. previous session).
+		comments, err := ghpkg.FetchPRComments(ctx, r.executor, pr.Number, pr.Repository.NameWithOwner)
+		if err != nil {
+			r.logger.Warn("could not fetch comments, treating PR as new", "pr", pr.Number, "err", err)
+			firstTimePRs = append(firstTimePRs, pr)
+			continue
+		}
+
+		last := ghpkg.FindLastWatsonComment(comments, r.cfg.GitHubReviewerUsername)
+		if last == nil {
+			firstTimePRs = append(firstTimePRs, pr)
+			continue
+		}
+
+		// Previous review found: recover state so processMentionedPRs can detect
+		// any mention that arrived since that review (including across restarts).
+		r.logger.Debug("recovering previously-reviewed PR into cache", "pr", pr.Number)
+		r.processed.Store(pr.Number, reviewRecord{
+			PR:         pr,
+			Review:     last.Body,
+			ReviewedAt: last.CreatedAt,
+		})
+	}
+
+	if len(firstTimePRs) == 0 {
+		r.logger.Info("no new PRs to review")
 	} else {
-		r.logger.Info("processing PRs", "count", len(prs))
+		r.logger.Info("processing new PRs", "count", len(firstTimePRs))
 		var wg sync.WaitGroup
-		for _, pr := range prs {
+		for _, pr := range firstTimePRs {
 			wg.Add(1)
 			go func(pr ghpkg.PullRequest) {
 				defer wg.Done()

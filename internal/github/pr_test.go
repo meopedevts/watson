@@ -3,19 +3,18 @@ package github
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 )
 
-func TestListPendingPRs_ReturnsParsedPRs(t *testing.T) {
+func TestListReviewRequestedPRs_ReturnsParsedPRs(t *testing.T) {
 	raw := `[
 		{"number":1,"title":"feat: A","body":"body A","repository":{"nameWithOwner":"org/repo"}},
 		{"number":2,"title":"feat: B","body":"","repository":{"nameWithOwner":"org/repo"}}
 	]`
 	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte(raw)}}}
 
-	prs, err := ListPendingPRs(context.Background(), exec, &sync.Map{})
+	prs, err := ListReviewRequestedPRs(context.Background(), exec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -27,7 +26,7 @@ func TestListPendingPRs_ReturnsParsedPRs(t *testing.T) {
 	}
 }
 
-func TestListPendingPRs_FiltersProcessed(t *testing.T) {
+func TestListReviewRequestedPRs_ReturnsAll(t *testing.T) {
 	raw := `[
 		{"number":1,"title":"feat: A","body":"","repository":{"nameWithOwner":"org/repo"}},
 		{"number":2,"title":"feat: B","body":"","repository":{"nameWithOwner":"org/repo"}},
@@ -35,26 +34,19 @@ func TestListPendingPRs_FiltersProcessed(t *testing.T) {
 	]`
 	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte(raw)}}}
 
-	processed := &sync.Map{}
-	processed.Store(1, struct{}{})
-	processed.Store(3, struct{}{})
-
-	prs, err := ListPendingPRs(context.Background(), exec, processed)
+	prs, err := ListReviewRequestedPRs(context.Background(), exec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(prs) != 1 {
-		t.Fatalf("expected 1 PR, got %d", len(prs))
-	}
-	if prs[0].Number != 2 {
-		t.Errorf("expected PR #2, got #%d", prs[0].Number)
+	if len(prs) != 3 {
+		t.Fatalf("expected all 3 PRs, got %d", len(prs))
 	}
 }
 
-func TestListPendingPRs_GhError(t *testing.T) {
+func TestListReviewRequestedPRs_GhError(t *testing.T) {
 	exec := &MockExecutor{Responses: []MockResponse{{Err: errors.New("gh: not found")}}}
 
-	_, err := ListPendingPRs(context.Background(), exec, &sync.Map{})
+	_, err := ListReviewRequestedPRs(context.Background(), exec)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -78,6 +70,38 @@ func TestPullRequest_CloneURL_SSH(t *testing.T) {
 	pr := PullRequest{Repository: Repository{NameWithOwner: "org/repo"}}
 	if got := pr.CloneURL("github-snk"); got != "git@github-snk:org/repo.git" {
 		t.Errorf("expected SSH URL with alias, got %q", got)
+	}
+}
+
+func TestFindLastWatsonComment_ReturnsLatest(t *testing.T) {
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "watson"}, Body: "first review", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+		{Author: CommentAuthor{Login: "alice"}, Body: "nice", CreatedAt: mustParseTime("2026-03-17T11:00:00Z")},
+		{Author: CommentAuthor{Login: "watson"}, Body: "second review", CreatedAt: mustParseTime("2026-03-17T12:00:00Z")},
+	}
+
+	got := FindLastWatsonComment(comments, "watson")
+	if got == nil {
+		t.Fatal("expected comment, got nil")
+	}
+	if got.Body != "second review" {
+		t.Errorf("expected latest comment, got %q", got.Body)
+	}
+}
+
+func TestFindLastWatsonComment_NilWhenNone(t *testing.T) {
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "alice"}, Body: "LGTM", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+	}
+
+	if got := FindLastWatsonComment(comments, "watson"); got != nil {
+		t.Errorf("expected nil, got comment from %q", got.Author.Login)
+	}
+}
+
+func TestFindLastWatsonComment_EmptySlice(t *testing.T) {
+	if got := FindLastWatsonComment(nil, "watson"); got != nil {
+		t.Error("expected nil for empty comments")
 	}
 }
 

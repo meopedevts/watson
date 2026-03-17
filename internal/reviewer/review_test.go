@@ -61,6 +61,11 @@ func TestCleanupStaleRecords_KeepsAllFresh(t *testing.T) {
 	}
 }
 
+func TestCleanupStaleRecords_EmptyMap(t *testing.T) {
+	r := newTestReviewer(168, 60)
+	r.cleanupStaleRecords() // must not panic on empty map
+}
+
 func TestProcessMentionedPRs_SkipsWithinCooldown(t *testing.T) {
 	// MockExecutor in the github package is only accessible from that package.
 	// We verify the cooldown by checking that no executor call is made:
