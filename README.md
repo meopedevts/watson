@@ -108,6 +108,7 @@ task clean          # Remove binário e artefatos
 
 | Documento | Conteúdo |
 |-----------|----------|
+| [`docs/docker.md`](docs/docker.md) | Deploy com Docker: build, autenticação OAuth/API key, SSH |
 | [`docs/architecture.md`](docs/architecture.md) | Estrutura de pacotes, decisões técnicas, fluxo interno |
 | [`docs/configuration.md`](docs/configuration.md) | Referência completa de configuração e autenticação |
 | [`docs/development.md`](docs/development.md) | Build, testes, cobertura e convenções |
