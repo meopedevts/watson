@@ -84,6 +84,19 @@ GH_TOKEN=your-github-token
 
 ---
 
+## Identidade Git (opcional)
+
+O watson executa `git merge --no-commit` para detectar conflitos nos PRs. O git exige uma identidade configurada para isso. Defina no `.env`:
+
+```env
+GIT_USER_NAME=Your Name
+GIT_USER_EMAIL=you@example.com
+```
+
+> Essa identidade nunca é enviada ao GitHub — é usada apenas localmente dentro do container durante a detecção de conflitos.
+
+---
+
 ## Clonagem via SSH (opcional)
 
 Por padrão o watson clona repositórios via HTTPS. Se preferir SSH (ex.: múltiplas contas GitHub ou GitHub Enterprise), defina `GIT_SSH_HOST` e monte suas chaves SSH no container.
