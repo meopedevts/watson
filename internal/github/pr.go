@@ -161,7 +161,7 @@ func FindMentionAfter(comments []Comment, username string, after time.Time) *Com
 // field returned by gh pr view --json comments). reaction must be a valid
 // ReactionContent enum value (e.g. "EYES", "THUMBS_UP", "HEART").
 func ReactToComment(ctx context.Context, exec Executor, commentID string, reaction string) error {
-	const mutation = `mutation($id:ID!,$r:ReactionContent!){addReaction(input:{subjectId:$id,content:$r}){reaction{content}}}`
+	const mutation = `mutation($subjectId:ID!,$content:ReactionContent!){addReaction(input:{subjectId:$subjectId,content:$content}){reaction{content}}}`
 	_, err := exec.Run(ctx,
 		"gh", "api", "graphql",
 		"-f", "query="+mutation,
