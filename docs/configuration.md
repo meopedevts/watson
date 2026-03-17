@@ -7,7 +7,7 @@
 Usuário GitHub cujos review requests serão monitorados. O daemon busca PRs onde este usuário foi solicitado como reviewer.
 
 ```bash
-GITHUB_REVIEWER_USERNAME=seu-usuario ./pr-reviewer
+GITHUB_REVIEWER_USERNAME=seu-usuario ./watson
 ```
 
 ---
@@ -20,7 +20,7 @@ Intervalo em minutos entre cada poll do GitHub.
 - **Restrição:** deve ser um inteiro positivo
 
 ```bash
-POLL_INTERVAL_MINUTES=5 ./pr-reviewer
+POLL_INTERVAL_MINUTES=5 ./watson
 ```
 
 O daemon também executa imediatamente ao subir, sem esperar o primeiro tick.
@@ -34,7 +34,7 @@ Identificador do modelo Claude passado para a CLI. Qualquer modelo disponível n
 - **Padrão:** `claude-sonnet-4-20250514`
 
 ```bash
-CLAUDE_MODEL=claude-opus-4-5 ./pr-reviewer
+CLAUDE_MODEL=claude-opus-4-5 ./watson
 ```
 
 ---
@@ -43,10 +43,10 @@ CLAUDE_MODEL=claude-opus-4-5 ./pr-reviewer
 
 Diretório onde os clones temporários são criados. Cada PR gera um subdiretório com nome único (`pr-clone-*`) que é removido ao final do processamento.
 
-- **Padrão:** `/tmp/pr-reviewer`
+- **Padrão:** `/tmp/watson`
 
 ```bash
-REPO_BASE_DIR=/var/tmp/reviews ./pr-reviewer
+REPO_BASE_DIR=/var/tmp/reviews ./watson
 ```
 
 O diretório é criado automaticamente se não existir.
@@ -93,7 +93,7 @@ Host <alias>
 2. Passe o alias via variável de ambiente:
 
 ```bash
-GIT_SSH_HOST=<alias> ./pr-reviewer
+GIT_SSH_HOST=<alias> ./watson
 ```
 
 3. Verifique que a chave funciona:
@@ -111,7 +111,7 @@ ssh -T git@<alias>
 Imprime os reviews no stdout sem postar comentários no GitHub. Útil para testar o pipeline completo sem efeitos colaterais.
 
 ```bash
-./pr-reviewer --dry-run
+./watson --dry-run
 ```
 
 Em dry-run, todas as etapas são executadas normalmente (clone, diff, Claude, detecção de conflitos). Apenas o `gh pr comment` é substituído por uma impressão no terminal.
@@ -126,7 +126,7 @@ POLL_INTERVAL_MINUTES=10 \
 CLAUDE_MODEL=claude-sonnet-4-20250514 \
 REPO_BASE_DIR=/tmp/reviews \
 GIT_SSH_HOST=meu-alias-ssh \
-./pr-reviewer
+./watson
 ```
 
 ---

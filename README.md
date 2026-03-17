@@ -1,4 +1,4 @@
-# pr-reviewer
+# watson
 
 [Arquitetura](docs/architecture.md) · [Configuração](docs/configuration.md) · [Desenvolvimento](docs/development.md)
 
@@ -54,7 +54,7 @@ flowchart TD
 ```bash
 git clone https://github.com/meopedevts/watson
 cd watson
-go build -o pr-reviewer ./cmd/
+go build -o watson ./cmd/
 ```
 
 ---
@@ -63,13 +63,13 @@ go build -o pr-reviewer ./cmd/
 
 ```bash
 # Produção — posta comentários nos PRs
-GITHUB_REVIEWER_USERNAME=seu-usuario ./pr-reviewer
+GITHUB_REVIEWER_USERNAME=seu-usuario ./watson
 
 # Dry-run — imprime reviews no stdout, sem escrever no GitHub
-GITHUB_REVIEWER_USERNAME=seu-usuario ./pr-reviewer --dry-run
+GITHUB_REVIEWER_USERNAME=seu-usuario ./watson --dry-run
 
 # Poll a cada 5 minutos
-GITHUB_REVIEWER_USERNAME=seu-usuario POLL_INTERVAL_MINUTES=5 ./pr-reviewer
+GITHUB_REVIEWER_USERNAME=seu-usuario POLL_INTERVAL_MINUTES=5 ./watson
 ```
 
 Pressione `Ctrl+C` para encerrar o daemon graciosamente.
@@ -83,7 +83,7 @@ Pressione `Ctrl+C` para encerrar o daemon graciosamente.
 | `GITHUB_REVIEWER_USERNAME` | Sim | — | Seu usuário GitHub |
 | `POLL_INTERVAL_MINUTES` | Não | `15` | Intervalo de polling em minutos |
 | `CLAUDE_MODEL` | Não | `claude-sonnet-4-20250514` | Modelo Claude utilizado |
-| `REPO_BASE_DIR` | Não | `/tmp/pr-reviewer` | Diretório para clones temporários |
+| `REPO_BASE_DIR` | Não | `/tmp/watson` | Diretório para clones temporários |
 | `GIT_SSH_HOST` | Não | — | Alias SSH para autenticação customizada |
 
 > Para autenticação via SSH com configuração customizada, veja [`docs/configuration.md`](docs/configuration.md).

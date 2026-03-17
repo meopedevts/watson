@@ -39,7 +39,7 @@ func main() {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	logger.Info("pr-reviewer started",
+	logger.Info("watson started",
 		"pollIntervalMinutes", cfg.PollIntervalMinutes,
 		"claudeModel", cfg.ClaudeModel,
 		"dryRun", cfg.DryRun,

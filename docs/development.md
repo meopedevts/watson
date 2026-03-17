@@ -14,10 +14,10 @@
 ```bash
 task build
 # ou diretamente:
-go build -o pr-reviewer ./cmd/
+go build -o watson ./cmd/
 ```
 
-O binário é gerado na raiz do projeto como `./pr-reviewer`.
+O binário é gerado na raiz do projeto como `./watson`.
 
 ---
 
@@ -62,7 +62,7 @@ prs, err := ListPendingPRs(ctx, exec, &sync.Map{})
 ## Tasks disponíveis
 
 ```bash
-task build          # Compila ./pr-reviewer
+task build          # Compila ./watson
 task test           # go test ./...
 task test-verbose   # go test -v ./...
 task test-coverage  # Gera coverage.out e coverage.html
@@ -72,7 +72,7 @@ task tidy           # go mod tidy
 task run            # Compila e executa em produção
 task dry-run        # Compila e executa em dry-run
 task dev            # dry-run com POLL_INTERVAL_MINUTES=1
-task clean          # Remove binário, coverage.out, coverage.html e /tmp/pr-reviewer
+task clean          # Remove binário, coverage.out, coverage.html e /tmp/watson
 ```
 
 `task check` é o comando recomendado antes de qualquer commit — garante que o código compila, passa no vet e todos os testes passam.
@@ -98,7 +98,7 @@ Para adicionar uma dependência: `go get <módulo>` seguido de `task tidy`.
 O daemon emite logs JSON estruturados via `log/slog`:
 
 ```json
-{"time":"...","level":"INFO","msg":"pr-reviewer started","pollIntervalMinutes":15,"dryRun":false}
+{"time":"...","level":"INFO","msg":"watson started","pollIntervalMinutes":15,"dryRun":false}
 {"time":"...","level":"INFO","msg":"processing PRs","count":2}
 {"time":"...","level":"INFO","msg":"starting review","pr":42,"title":"feat: ...","repo":"org/repo"}
 {"time":"...","level":"INFO","msg":"review completed","pr":42}

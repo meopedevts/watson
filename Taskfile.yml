@@ -1,14 +1,14 @@
 version: "3"
 
 vars:
-  BINARY: pr-reviewer
+  BINARY: watson
   CMD: ./cmd/
 
 env:
   GITHUB_REVIEWER_USERNAME: '{{.GITHUB_REVIEWER_USERNAME | default ""}}'
   POLL_INTERVAL_MINUTES: '{{.POLL_INTERVAL_MINUTES | default "15"}}'
   CLAUDE_MODEL: '{{.CLAUDE_MODEL | default "claude-sonnet-4-20250514"}}'
-  REPO_BASE_DIR: '{{.REPO_BASE_DIR | default "/tmp/pr-reviewer"}}'
+  REPO_BASE_DIR: '{{.REPO_BASE_DIR | default "/tmp/watson"}}'
   # GIT_SSH_HOST: opcional. Define um alias SSH do ~/.ssh/config para autenticação.
   # Ex: GIT_SSH_HOST=github-snk task run  →  clona via git@github-snk:owner/repo.git
   # Sem esta variável, clona via HTTPS (padrão).
@@ -18,7 +18,7 @@ tasks:
   # ── build ────────────────────────────────────────────────────────────────
 
   build:
-    desc: Compila o binário em ./pr-reviewer
+    desc: Compila o binário em ./watson
     cmds:
       - go build -o {{.BINARY}} {{.CMD}}
     sources:
@@ -100,4 +100,4 @@ tasks:
     desc: Remove binário e artefatos de cobertura
     cmds:
       - rm -f {{.BINARY}} coverage.out coverage.html
-      - rm -rf /tmp/pr-reviewer
+      - rm -rf /tmp/watson

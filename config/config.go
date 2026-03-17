@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// Config holds all runtime configuration for the pr-reviewer daemon.
+// Config holds all runtime configuration for the watson daemon.
 type Config struct {
 	// GitHubReviewerUsername is the GitHub username whose review requests are polled.
 	// Required — loaded from GITHUB_REVIEWER_USERNAME.
@@ -21,7 +21,7 @@ type Config struct {
 	ClaudeModel string
 
 	// RepoBaseDir is the parent directory for temporary clone directories.
-	// Loaded from REPO_BASE_DIR; default: "/tmp/pr-reviewer".
+	// Loaded from REPO_BASE_DIR; default: "/tmp/watson".
 	RepoBaseDir string
 
 	// GitSSHHost is an optional SSH host alias defined in ~/.ssh/config.
@@ -53,7 +53,7 @@ func Load() (*Config, error) {
 	}
 
 	model := getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
-	baseDir := getenv("REPO_BASE_DIR", "/tmp/pr-reviewer")
+	baseDir := getenv("REPO_BASE_DIR", "/tmp/watson")
 	sshHost := os.Getenv("GIT_SSH_HOST")
 
 	return &Config{
