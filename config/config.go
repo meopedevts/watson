@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 )
 
@@ -21,7 +22,7 @@ type Config struct {
 	ClaudeModel string
 
 	// RepoBaseDir is the parent directory for temporary clone directories.
-	// Loaded from REPO_BASE_DIR; default: "/tmp/watson".
+	// Loaded from REPO_BASE_DIR; default: filepath.Join(os.TempDir(), "watson").
 	RepoBaseDir string
 
 	// GitSSHHost is an optional SSH host alias defined in ~/.ssh/config.
@@ -53,7 +54,7 @@ func Load() (*Config, error) {
 	}
 
 	model := getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
-	baseDir := getenv("REPO_BASE_DIR", "/tmp/watson")
+	baseDir := getenv("REPO_BASE_DIR", filepath.Join(os.TempDir(), "watson"))
 	sshHost := os.Getenv("GIT_SSH_HOST")
 
 	return &Config{
