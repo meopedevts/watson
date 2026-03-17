@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
+	"strings"
+	"time"
 )
 
 // Repository holds the repo metadata returned by gh search prs.
@@ -52,12 +53,28 @@ func (pr PullRequest) CloneURL(sshHost string) string {
 	return pr.RepoURL()
 }
 
-// ListPendingPRs fetches all open PRs where the authenticated user is a
-// requested reviewer across all repositories, filtering out PR numbers
-// already present in the processed sync.Map.
+// ResolveCurrentUser returns the GitHub login of the authenticated user by
+// querying the GitHub API. Call once on startup and store the result in Config.
+//
+//	gh api user --jq .login
+func ResolveCurrentUser(ctx context.Context, exec Executor) (string, error) {
+	out, err := exec.Run(ctx, "gh", "api", "user", "--jq", ".login")
+	if err != nil {
+		return "", fmt.Errorf("gh api user: %w", err)
+	}
+	username := strings.TrimSpace(string(out))
+	if username == "" {
+		return "", fmt.Errorf("gh api user returned empty login")
+	}
+	return username, nil
+}
+
+// ListReviewRequestedPRs fetches all open PRs where the authenticated user is a
+// requested reviewer across all repositories.
 //
 // Uses gh search prs so it works from any directory without a local git context.
-func ListPendingPRs(ctx context.Context, exec Executor, processed *sync.Map) ([]PullRequest, error) {
+// Filtering (e.g. skipping already-processed PRs) is the caller's responsibility.
+func ListReviewRequestedPRs(ctx context.Context, exec Executor) ([]PullRequest, error) {
 	out, err := exec.Run(ctx,
 		"gh", "search", "prs",
 		"--review-requested=@me",
@@ -72,14 +89,89 @@ func ListPendingPRs(ctx context.Context, exec Executor, processed *sync.Map) ([]
 	if err := json.Unmarshal(out, &all); err != nil {
 		return nil, fmt.Errorf("parse gh search prs output: %w", err)
 	}
+	return all, nil
+}
 
-	pending := make([]PullRequest, 0, len(all))
-	for _, pr := range all {
-		if _, done := processed.Load(pr.Number); !done {
-			pending = append(pending, pr)
+// CommentAuthor holds the author of a PR comment.
+type CommentAuthor struct {
+	Login string `json:"login"`
+}
+
+// Comment represents a single issue-level comment on a pull request.
+type Comment struct {
+	ID        string        `json:"id"` // GraphQL node ID (e.g. "IC_kwDO...")
+	Author    CommentAuthor `json:"author"`
+	Body      string        `json:"body"`
+	CreatedAt time.Time     `json:"createdAt"`
+}
+
+// FetchPRComments returns the issue-level comments for the given PR.
+//
+//	gh pr view <prNumber> --repo <nameWithOwner> --json comments
+func FetchPRComments(ctx context.Context, exec Executor, prNumber int, nameWithOwner string) ([]Comment, error) {
+	out, err := exec.Run(ctx,
+		"gh", "pr", "view", fmt.Sprintf("%d", prNumber),
+		"--repo", nameWithOwner,
+		"--json", "comments",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("gh pr view #%d comments: %w", prNumber, err)
+	}
+
+	var result struct {
+		Comments []Comment `json:"comments"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("parse comments for PR #%d: %w", prNumber, err)
+	}
+	return result.Comments, nil
+}
+
+// FindLastWatsonComment returns the most recent comment authored by username,
+// or nil if the user has no comments on the PR.
+func FindLastWatsonComment(comments []Comment, username string) *Comment {
+	var last *Comment
+	for i := range comments {
+		c := &comments[i]
+		if c.Author.Login == username {
+			if last == nil || c.CreatedAt.After(last.CreatedAt) {
+				last = c
+			}
 		}
 	}
-	return pending, nil
+	return last
+}
+
+// FindMentionAfter returns the first comment that mentions @username posted after
+// the given cutoff time, ignoring comments authored by username itself (to prevent
+// self-triggering). Returns nil if no such comment exists.
+func FindMentionAfter(comments []Comment, username string, after time.Time) *Comment {
+	mention := "@" + username
+	for i := range comments {
+		c := &comments[i]
+		if c.CreatedAt.After(after) && strings.Contains(c.Body, mention) && c.Author.Login != username {
+			return c
+		}
+	}
+	return nil
+}
+
+// ReactToComment adds an emoji reaction to the given comment using the GitHub
+// GraphQL API. commentID must be the GraphQL node ID of the comment (the "id"
+// field returned by gh pr view --json comments). reaction must be a valid
+// ReactionContent enum value (e.g. "EYES", "THUMBS_UP", "HEART").
+func ReactToComment(ctx context.Context, exec Executor, commentID string, reaction string) error {
+	const mutation = `mutation($subjectId:ID!,$content:ReactionContent!){addReaction(input:{subjectId:$subjectId,content:$content}){reaction{content}}}`
+	_, err := exec.Run(ctx,
+		"gh", "api", "graphql",
+		"-f", "query="+mutation,
+		"-f", "subjectId="+commentID,
+		"-f", "content="+reaction,
+	)
+	if err != nil {
+		return fmt.Errorf("react to comment: %w", err)
+	}
+	return nil
 }
 
 // PRRefs holds the head branch, base branch, and commit list for a PR.

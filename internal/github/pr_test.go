@@ -3,18 +3,18 @@ package github
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
+	"time"
 )
 
-func TestListPendingPRs_ReturnsParsedPRs(t *testing.T) {
+func TestListReviewRequestedPRs_ReturnsParsedPRs(t *testing.T) {
 	raw := `[
 		{"number":1,"title":"feat: A","body":"body A","repository":{"nameWithOwner":"org/repo"}},
 		{"number":2,"title":"feat: B","body":"","repository":{"nameWithOwner":"org/repo"}}
 	]`
 	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte(raw)}}}
 
-	prs, err := ListPendingPRs(context.Background(), exec, &sync.Map{})
+	prs, err := ListReviewRequestedPRs(context.Background(), exec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestListPendingPRs_ReturnsParsedPRs(t *testing.T) {
 	}
 }
 
-func TestListPendingPRs_FiltersProcessed(t *testing.T) {
+func TestListReviewRequestedPRs_ReturnsAll(t *testing.T) {
 	raw := `[
 		{"number":1,"title":"feat: A","body":"","repository":{"nameWithOwner":"org/repo"}},
 		{"number":2,"title":"feat: B","body":"","repository":{"nameWithOwner":"org/repo"}},
@@ -34,26 +34,19 @@ func TestListPendingPRs_FiltersProcessed(t *testing.T) {
 	]`
 	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte(raw)}}}
 
-	processed := &sync.Map{}
-	processed.Store(1, struct{}{})
-	processed.Store(3, struct{}{})
-
-	prs, err := ListPendingPRs(context.Background(), exec, processed)
+	prs, err := ListReviewRequestedPRs(context.Background(), exec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(prs) != 1 {
-		t.Fatalf("expected 1 PR, got %d", len(prs))
-	}
-	if prs[0].Number != 2 {
-		t.Errorf("expected PR #2, got #%d", prs[0].Number)
+	if len(prs) != 3 {
+		t.Fatalf("expected all 3 PRs, got %d", len(prs))
 	}
 }
 
-func TestListPendingPRs_GhError(t *testing.T) {
+func TestListReviewRequestedPRs_GhError(t *testing.T) {
 	exec := &MockExecutor{Responses: []MockResponse{{Err: errors.New("gh: not found")}}}
 
-	_, err := ListPendingPRs(context.Background(), exec, &sync.Map{})
+	_, err := ListReviewRequestedPRs(context.Background(), exec)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -77,6 +70,203 @@ func TestPullRequest_CloneURL_SSH(t *testing.T) {
 	pr := PullRequest{Repository: Repository{NameWithOwner: "org/repo"}}
 	if got := pr.CloneURL("github-snk"); got != "git@github-snk:org/repo.git" {
 		t.Errorf("expected SSH URL with alias, got %q", got)
+	}
+}
+
+func TestResolveCurrentUser(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte("watsonrc\n")}}}
+
+	got, err := ResolveCurrentUser(context.Background(), exec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "watsonrc" {
+		t.Errorf("expected %q, got %q", "watsonrc", got)
+	}
+}
+
+func TestResolveCurrentUser_EmptyOutput(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte("\n")}}}
+
+	_, err := ResolveCurrentUser(context.Background(), exec)
+	if err == nil {
+		t.Fatal("expected error for empty login, got nil")
+	}
+}
+
+func TestResolveCurrentUser_GhError(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Err: errors.New("gh: auth required")}}}
+
+	_, err := ResolveCurrentUser(context.Background(), exec)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestFindLastWatsonComment_ReturnsLatest(t *testing.T) {
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "watson"}, Body: "first review", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+		{Author: CommentAuthor{Login: "alice"}, Body: "nice", CreatedAt: mustParseTime("2026-03-17T11:00:00Z")},
+		{Author: CommentAuthor{Login: "watson"}, Body: "second review", CreatedAt: mustParseTime("2026-03-17T12:00:00Z")},
+	}
+
+	got := FindLastWatsonComment(comments, "watson")
+	if got == nil {
+		t.Fatal("expected comment, got nil")
+	}
+	if got.Body != "second review" {
+		t.Errorf("expected latest comment, got %q", got.Body)
+	}
+}
+
+func TestFindLastWatsonComment_NilWhenNone(t *testing.T) {
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "alice"}, Body: "LGTM", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+	}
+
+	if got := FindLastWatsonComment(comments, "watson"); got != nil {
+		t.Errorf("expected nil, got comment from %q", got.Author.Login)
+	}
+}
+
+func TestFindLastWatsonComment_EmptySlice(t *testing.T) {
+	if got := FindLastWatsonComment(nil, "watson"); got != nil {
+		t.Error("expected nil for empty comments")
+	}
+}
+
+func TestFetchPRComments(t *testing.T) {
+	raw := `{"comments":[
+		{"author":{"login":"alice"},"body":"looks good @watson","createdAt":"2026-03-17T10:00:00Z"},
+		{"author":{"login":"bob"},"body":"nice work","createdAt":"2026-03-17T11:00:00Z"}
+	]}`
+	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte(raw)}}}
+
+	comments, err := FetchPRComments(context.Background(), exec, 42, "org/repo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(comments) != 2 {
+		t.Fatalf("expected 2 comments, got %d", len(comments))
+	}
+	if comments[0].Author.Login != "alice" {
+		t.Errorf("expected alice, got %q", comments[0].Author.Login)
+	}
+	if comments[1].Body != "nice work" {
+		t.Errorf("unexpected body: %q", comments[1].Body)
+	}
+}
+
+func TestFetchPRComments_Error(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Err: errors.New("gh: not found")}}}
+
+	_, err := FetchPRComments(context.Background(), exec, 1, "org/repo")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func mustParseTime(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+func TestFindMentionAfter_ReturnsMention(t *testing.T) {
+	cutoff := mustParseTime("2026-03-17T09:00:00Z")
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "alice"}, Body: "@watson please re-review", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+	}
+
+	got := FindMentionAfter(comments, "watson", cutoff)
+	if got == nil {
+		t.Fatal("expected mention, got nil")
+	}
+	if got.Author.Login != "alice" {
+		t.Errorf("expected alice, got %q", got.Author.Login)
+	}
+}
+
+func TestFindMentionAfter_NilWhenNone(t *testing.T) {
+	cutoff := mustParseTime("2026-03-17T09:00:00Z")
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "alice"}, Body: "no mention here", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+	}
+
+	if got := FindMentionAfter(comments, "watson", cutoff); got != nil {
+		t.Errorf("expected nil, got comment from %q", got.Author.Login)
+	}
+}
+
+func TestFindMentionAfter_IgnoresBeforeCutoff(t *testing.T) {
+	cutoff := mustParseTime("2026-03-17T12:00:00Z")
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "alice"}, Body: "@watson re-review", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+	}
+
+	if got := FindMentionAfter(comments, "watson", cutoff); got != nil {
+		t.Error("expected nil for comment before cutoff")
+	}
+}
+
+func TestFindMentionAfter_IgnoresOwnComments(t *testing.T) {
+	cutoff := mustParseTime("2026-03-17T09:00:00Z")
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "watson"}, Body: "@watson this is my own comment", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+	}
+
+	if got := FindMentionAfter(comments, "watson", cutoff); got != nil {
+		t.Error("expected nil: should not self-trigger")
+	}
+}
+
+func TestFindMentionAfter_ReturnsFirstMatch(t *testing.T) {
+	cutoff := mustParseTime("2026-03-17T09:00:00Z")
+	comments := []Comment{
+		{Author: CommentAuthor{Login: "alice"}, Body: "@watson first", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},
+		{Author: CommentAuthor{Login: "bob"}, Body: "@watson second", CreatedAt: mustParseTime("2026-03-17T11:00:00Z")},
+	}
+
+	got := FindMentionAfter(comments, "watson", cutoff)
+	if got == nil {
+		t.Fatal("expected mention, got nil")
+	}
+	if got.Author.Login != "alice" {
+		t.Errorf("expected first match from alice, got %q", got.Author.Login)
+	}
+}
+
+func TestReactToComment(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte(`{"data":{}}`)}}}
+
+	if err := ReactToComment(context.Background(), exec, "IC_abc123", "EYES"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(exec.Calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(exec.Calls))
+	}
+	call := exec.Calls[0]
+	if call.Name != "gh" {
+		t.Errorf("expected gh, got %q", call.Name)
+	}
+	found := false
+	for _, arg := range call.Args {
+		if arg == "subjectId=IC_abc123" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected subjectId=IC_abc123 in args: %v", call.Args)
+	}
+}
+
+func TestReactToComment_Error(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Err: errors.New("gh: forbidden")}}}
+
+	if err := ReactToComment(context.Background(), exec, "IC_abc123", "EYES"); err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
 

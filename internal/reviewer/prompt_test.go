@@ -131,6 +131,41 @@ func TestBuildPrompt_ContainsReviewTemplate(t *testing.T) {
 	}
 }
 
+func TestBuildPrompt_ReReview_ContainsContext(t *testing.T) {
+	pr := github.PullRequest{Number: 10, Title: "fix: auth"}
+	ctx := PromptContext{
+		PR:             pr,
+		Diff:           "diff",
+		IsReReview:     true,
+		PreviousReview: "## Resumo\nAlterou autenticação.",
+		MentionComment: "@watson o bug foi corrigido, por favor revise novamente",
+	}
+	prompt := BuildPrompt(ctx)
+
+	for _, want := range []string{
+		"revisão atualizada",
+		"@watson o bug foi corrigido",
+		"## Resumo\nAlterou autenticação.",
+		"Contexto do re-review",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing %q", want)
+		}
+	}
+}
+
+func TestBuildPrompt_ReReview_False_NoContext(t *testing.T) {
+	pr := github.PullRequest{Number: 10, Title: "fix: auth"}
+	prompt := BuildPrompt(PromptContext{PR: pr, Diff: "diff"})
+
+	if strings.Contains(prompt, "revisão atualizada") {
+		t.Error("non-re-review prompt should not contain re-review header")
+	}
+	if strings.Contains(prompt, "Contexto do re-review") {
+		t.Error("non-re-review prompt should not contain re-review section")
+	}
+}
+
 func TestBuildPrompt_ContainsNote(t *testing.T) {
 	pr := github.PullRequest{Number: 9, Title: "chore: deps"}
 	prompt := BuildPrompt(PromptContext{PR: pr, Diff: "diff", Note: "Arquivos ignorados: go.sum"})
