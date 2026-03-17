@@ -1,6 +1,6 @@
 # watson
 
-[Arquitetura](docs/architecture.md) · [Configuração](docs/configuration.md) · [Desenvolvimento](docs/development.md)
+[Arquitetura](docs/architecture.md) · [Configuração](docs/configuration.md) · [Desenvolvimento](docs/development.md) · [Docker](docs/docker.md)
 
 ---
 
@@ -41,21 +41,31 @@ flowchart TD
 
 ---
 
-## Pré-requisitos
-
-- **Go 1.21+**
-- **[GitHub CLI](https://cli.github.com/)** autenticado (`gh auth login`)
-- **[Claude Code CLI](https://claude.ai/code)** instalado e autenticado
-
----
-
 ## Instalação
+
+### Binário local
+
+**Pré-requisitos:**
+- Go 1.25+
+- [GitHub CLI](https://cli.github.com/) autenticado (`gh auth login`)
+- [Claude Code CLI](https://claude.ai/code) instalado e autenticado
 
 ```bash
 git clone https://github.com/meopedevts/watson
 cd watson
 go build -o watson ./cmd/
 ```
+
+### Docker
+
+Não requer Go, GitHub CLI nem Claude Code instalados localmente.
+
+```bash
+cp .env.example .env   # preencha as variáveis
+docker compose up -d
+```
+
+> Veja [`docs/docker.md`](docs/docker.md) para o guia completo de autenticação e configuração.
 
 ---
 
@@ -81,10 +91,16 @@ Pressione `Ctrl+C` para encerrar o daemon graciosamente.
 | Variável | Obrigatória | Padrão | Descrição |
 |----------|:-----------:|--------|-----------|
 | `GITHUB_REVIEWER_USERNAME` | Sim | — | Seu usuário GitHub |
+| `GH_TOKEN` | Sim¹ | — | Classic PAT do GitHub (escopo `repo`) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Sim² | — | OAuth token de longa duração (`claude setup-token`) |
+| `ANTHROPIC_API_KEY` | Sim² | — | API key da Anthropic (alternativa ao OAuth token) |
 | `POLL_INTERVAL_MINUTES` | Não | `15` | Intervalo de polling em minutos |
 | `CLAUDE_MODEL` | Não | `claude-sonnet-4-20250514` | Modelo Claude utilizado |
-| `REPO_BASE_DIR` | Não | `/tmp/watson` | Diretório para clones temporários |
+| `REPO_BASE_DIR` | Não | `os.TempDir()/watson` | Diretório para clones temporários |
 | `GIT_SSH_HOST` | Não | — | Alias SSH para autenticação customizada |
+
+¹ Obrigatório no Docker. No uso local o `gh auth login` é suficiente.
+² Escolha um dos dois. `CLAUDE_CODE_OAUTH_TOKEN` usa seu plano Pro/Max sem cobrança por token.
 
 > Para autenticação via SSH com configuração customizada, veja [`docs/configuration.md`](docs/configuration.md).
 
