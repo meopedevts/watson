@@ -14,6 +14,10 @@ type PromptContext struct {
 	Diff  string
 	Stats string // output of "git diff --stat"
 	Note  string // files excluded by sanitization, or truncation warning
+	// Re-review fields: populated only for mention-triggered reviews.
+	IsReReview     bool
+	PreviousReview string // Watson's last review text
+	MentionComment string // the comment that triggered the re-review
 }
 
 // BuildPrompt assembles the review prompt sent to the Claude CLI.
@@ -33,6 +37,9 @@ func BuildPrompt(ctx PromptContext) string {
 	var sb strings.Builder
 
 	sb.WriteString("Você é um engenheiro de software sênior fazendo um code review. Responda em português de forma direta e técnica.\n\n")
+	if ctx.IsReReview {
+		sb.WriteString("**Esta é uma revisão atualizada.** Considere o review anterior e o comentário que o solicitou ao elaborar sua análise.\n\n")
+	}
 	fmt.Fprintf(&sb, "## Pull Request #%d: %s\n", pr.Number, pr.Title)
 	fmt.Fprintf(&sb, "**Repositório:** %s\n", pr.Repository.NameWithOwner)
 
@@ -69,6 +76,17 @@ func BuildPrompt(ctx PromptContext) string {
 	sb.WriteString("```diff\n")
 	sb.WriteString(diff)
 	sb.WriteString("\n```\n\n")
+
+	if ctx.IsReReview {
+		sb.WriteString("### Contexto do re-review\n")
+		sb.WriteString("Comentário que solicitou o re-review:\n\n")
+		for _, line := range strings.Split(ctx.MentionComment, "\n") {
+			fmt.Fprintf(&sb, "> %s\n", line)
+		}
+		sb.WriteString("\nReview anterior para referência:\n\n")
+		sb.WriteString(ctx.PreviousReview)
+		sb.WriteString("\n\n")
+	}
 
 	sb.WriteString("Responda usando exatamente este template, sem adicionar ou remover seções:\n\n")
 	sb.WriteString("## Resumo\n")

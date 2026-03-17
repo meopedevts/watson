@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 )
 
 // Repository holds the repo metadata returned by gh search prs.
@@ -80,6 +82,54 @@ func ListPendingPRs(ctx context.Context, exec Executor, processed *sync.Map) ([]
 		}
 	}
 	return pending, nil
+}
+
+// CommentAuthor holds the author of a PR comment.
+type CommentAuthor struct {
+	Login string `json:"login"`
+}
+
+// Comment represents a single issue-level comment on a pull request.
+type Comment struct {
+	Author    CommentAuthor `json:"author"`
+	Body      string        `json:"body"`
+	CreatedAt time.Time     `json:"createdAt"`
+}
+
+// FetchPRComments returns the issue-level comments for the given PR.
+//
+//	gh pr view <prNumber> --repo <nameWithOwner> --json comments
+func FetchPRComments(ctx context.Context, exec Executor, prNumber int, nameWithOwner string) ([]Comment, error) {
+	out, err := exec.Run(ctx,
+		"gh", "pr", "view", fmt.Sprintf("%d", prNumber),
+		"--repo", nameWithOwner,
+		"--json", "comments",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("gh pr view #%d comments: %w", prNumber, err)
+	}
+
+	var result struct {
+		Comments []Comment `json:"comments"`
+	}
+	if err := json.Unmarshal(out, &result); err != nil {
+		return nil, fmt.Errorf("parse comments for PR #%d: %w", prNumber, err)
+	}
+	return result.Comments, nil
+}
+
+// FindMentionAfter returns the first comment that mentions @username posted after
+// the given cutoff time, ignoring comments authored by username itself (to prevent
+// self-triggering). Returns nil if no such comment exists.
+func FindMentionAfter(comments []Comment, username string, after time.Time) *Comment {
+	mention := "@" + username
+	for i := range comments {
+		c := &comments[i]
+		if c.CreatedAt.After(after) && strings.Contains(c.Body, mention) && c.Author.Login != username {
+			return c
+		}
+	}
+	return nil
 }
 
 // PRRefs holds the head branch, base branch, and commit list for a PR.

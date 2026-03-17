@@ -7,11 +7,25 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/meopedevts/watson/config"
 	"github.com/meopedevts/watson/internal/git"
 	ghpkg "github.com/meopedevts/watson/internal/github"
 )
+
+// reviewRecord stores state for a PR that has been reviewed at least once.
+type reviewRecord struct {
+	PR         ghpkg.PullRequest
+	Review     string    // the review text Watson posted
+	ReviewedAt time.Time // when it was posted
+}
+
+// reReviewContext carries the context for a mention-triggered re-review.
+type reReviewContext struct {
+	PreviousReview string
+	MentionComment string
+}
 
 // Reviewer orchestrates the full PR review pipeline.
 // All external dependencies are injected for testability.
@@ -32,9 +46,9 @@ func NewReviewer(cfg *config.Config, exec ghpkg.Executor, logger *slog.Logger) *
 	}
 }
 
-// ProcessPendingPRs is called on every ticker tick. It lists pending PRs
-// and launches a goroutine for each one. Per-PR errors are logged but
-// do not abort the loop.
+// ProcessPendingPRs is called on every ticker tick. It lists pending PRs,
+// launches a goroutine for each one, then checks reviewed PRs for new @mentions.
+// Per-PR errors are logged but do not abort the loop.
 func (r *Reviewer) ProcessPendingPRs(ctx context.Context) error {
 	prs, err := ghpkg.ListPendingPRs(ctx, r.executor, r.processed)
 	if err != nil {
@@ -43,33 +57,74 @@ func (r *Reviewer) ProcessPendingPRs(ctx context.Context) error {
 
 	if len(prs) == 0 {
 		r.logger.Info("no pending PRs found")
-		return nil
+	} else {
+		r.logger.Info("processing PRs", "count", len(prs))
+		var wg sync.WaitGroup
+		for _, pr := range prs {
+			wg.Add(1)
+			go func(pr ghpkg.PullRequest) {
+				defer wg.Done()
+				if err := r.ReviewPR(ctx, pr); err != nil {
+					r.logger.Error("review failed", "pr", pr.Number, "title", pr.Title, "err", err)
+				}
+			}(pr)
+		}
+		wg.Wait()
 	}
 
-	r.logger.Info("processing PRs", "count", len(prs))
-
-	var wg sync.WaitGroup
-	for _, pr := range prs {
-		wg.Add(1)
-		go func(pr ghpkg.PullRequest) {
-			defer wg.Done()
-			if err := r.ReviewPR(ctx, pr); err != nil {
-				r.logger.Error("review failed", "pr", pr.Number, "title", pr.Title, "err", err)
-			}
-		}(pr)
-	}
-	wg.Wait()
+	r.processMentionedPRs(ctx)
 	return nil
 }
 
-// ReviewPR runs the full review pipeline for a single PR:
+// processMentionedPRs checks all previously-reviewed PRs for new @mentions.
+// When a mention is found after the last review, a re-review is triggered with
+// the updated diff, the previous review text, and the triggering comment as context.
+func (r *Reviewer) processMentionedPRs(ctx context.Context) {
+	r.processed.Range(func(key, value any) bool {
+		rec, ok := value.(reviewRecord)
+		if !ok {
+			return true
+		}
+
+		comments, err := ghpkg.FetchPRComments(ctx, r.executor, rec.PR.Number, rec.PR.Repository.NameWithOwner)
+		if err != nil {
+			r.logger.Warn("failed to fetch comments for mention check", "pr", rec.PR.Number, "err", err)
+			return true
+		}
+
+		mention := ghpkg.FindMentionAfter(comments, r.cfg.GitHubReviewerUsername, rec.ReviewedAt)
+		if mention == nil {
+			return true
+		}
+
+		r.logger.Info("mention detected, triggering re-review", "pr", rec.PR.Number, "author", mention.Author.Login)
+		if err := r.reviewPRInternal(ctx, rec.PR, &reReviewContext{
+			PreviousReview: rec.Review,
+			MentionComment: mention.Body,
+		}); err != nil {
+			r.logger.Error("re-review failed", "pr", rec.PR.Number, "err", err)
+		}
+
+		return true
+	})
+}
+
+// ReviewPR runs the full review pipeline for a single PR (first-time review).
+func (r *Reviewer) ReviewPR(ctx context.Context, pr ghpkg.PullRequest) error {
+	return r.reviewPRInternal(ctx, pr, nil)
+}
+
+// reviewPRInternal is the shared review implementation used for both first-time
+// reviews and mention-triggered re-reviews. When reCtx is non-nil the prompt
+// includes the previous review text and the triggering comment.
+//
 //  1. Clone repository to a temp directory (cleaned up via defer)
-//  2. Compute diff against origin/main
+//  2. Compute diff against origin/<base>
 //  3. Build prompt and call Claude
 //  4. Check for merge conflicts; append warning if found
 //  5. Post comment (or print if dry-run)
-//  6. Mark PR as processed — ONLY on full success
-func (r *Reviewer) ReviewPR(ctx context.Context, pr ghpkg.PullRequest) error {
+//  6. Update processed record — ONLY on full success
+func (r *Reviewer) reviewPRInternal(ctx context.Context, pr ghpkg.PullRequest, reCtx *reReviewContext) error {
 	r.logger.Info("starting review", "pr", pr.Number, "title", pr.Title, "repo", pr.Repository.NameWithOwner)
 
 	refs, err := ghpkg.FetchPRRefs(ctx, r.executor, pr.Number, pr.Repository.NameWithOwner)
@@ -92,15 +147,20 @@ func (r *Reviewer) ReviewPR(ctx context.Context, pr ghpkg.PullRequest) error {
 		return fmt.Errorf("PR #%d diff: %w", pr.Number, err)
 	}
 
-	prompt := BuildPrompt(PromptContext{
+	promptCtx := PromptContext{
 		PR:    pr,
 		Refs:  refs,
 		Diff:  diffResult.Diff,
 		Stats: diffResult.Stats,
 		Note:  diffResult.Note,
-	})
+	}
+	if reCtx != nil {
+		promptCtx.IsReReview = true
+		promptCtx.PreviousReview = reCtx.PreviousReview
+		promptCtx.MentionComment = reCtx.MentionComment
+	}
 
-	review, err := r.runClaude(ctx, prompt)
+	review, err := r.runClaude(ctx, BuildPrompt(promptCtx))
 	if err != nil {
 		return fmt.Errorf("PR #%d claude review: %w", pr.Number, err)
 	}
@@ -117,7 +177,11 @@ func (r *Reviewer) ReviewPR(ctx context.Context, pr ghpkg.PullRequest) error {
 		return fmt.Errorf("PR #%d post comment: %w", pr.Number, err)
 	}
 
-	r.processed.Store(pr.Number, struct{}{})
+	r.processed.Store(pr.Number, reviewRecord{
+		PR:         pr,
+		Review:     review,
+		ReviewedAt: time.Now(),
+	})
 	r.logger.Info("review completed", "pr", pr.Number)
 	return nil
 }
