@@ -113,6 +113,24 @@ func TestBuildPrompt_ContainsStats(t *testing.T) {
 	}
 }
 
+func TestBuildPrompt_ContainsReviewTemplate(t *testing.T) {
+	pr := github.PullRequest{Number: 1, Title: "fix: bug"}
+	prompt := BuildPrompt(PromptContext{PR: pr, Diff: "diff"})
+
+	for _, section := range []string{
+		"## Resumo",
+		"## Problemas encontrados",
+		"## Pontos positivos",
+		"## Sugestões",
+		"## Veredicto",
+		"🔴", "🟡", "✅", "🔄", "🚫",
+	} {
+		if !strings.Contains(prompt, section) {
+			t.Errorf("prompt missing template section %q", section)
+		}
+	}
+}
+
 func TestBuildPrompt_ContainsNote(t *testing.T) {
 	pr := github.PullRequest{Number: 9, Title: "chore: deps"}
 	prompt := BuildPrompt(PromptContext{PR: pr, Diff: "diff", Note: "Arquivos ignorados: go.sum"})
