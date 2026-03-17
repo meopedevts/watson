@@ -238,6 +238,38 @@ func TestFindMentionAfter_ReturnsFirstMatch(t *testing.T) {
 	}
 }
 
+func TestReactToComment(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte(`{"data":{}}`)}}}
+
+	if err := ReactToComment(context.Background(), exec, "IC_abc123", "EYES"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(exec.Calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(exec.Calls))
+	}
+	call := exec.Calls[0]
+	if call.Name != "gh" {
+		t.Errorf("expected gh, got %q", call.Name)
+	}
+	found := false
+	for _, arg := range call.Args {
+		if arg == "subjectId=IC_abc123" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected subjectId=IC_abc123 in args: %v", call.Args)
+	}
+}
+
+func TestReactToComment_Error(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Err: errors.New("gh: forbidden")}}}
+
+	if err := ReactToComment(context.Background(), exec, "IC_abc123", "EYES"); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestFetchPRRefs(t *testing.T) {
 	raw := `{"headRefName":"feat/my-branch","baseRefName":"master"}`
 	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte(raw)}}}

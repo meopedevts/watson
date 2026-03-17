@@ -99,6 +99,7 @@ type CommentAuthor struct {
 
 // Comment represents a single issue-level comment on a pull request.
 type Comment struct {
+	ID        string        `json:"id"` // GraphQL node ID (e.g. "IC_kwDO...")
 	Author    CommentAuthor `json:"author"`
 	Body      string        `json:"body"`
 	CreatedAt time.Time     `json:"createdAt"`
@@ -151,6 +152,24 @@ func FindMentionAfter(comments []Comment, username string, after time.Time) *Com
 		if c.CreatedAt.After(after) && strings.Contains(c.Body, mention) && c.Author.Login != username {
 			return c
 		}
+	}
+	return nil
+}
+
+// ReactToComment adds an emoji reaction to the given comment using the GitHub
+// GraphQL API. commentID must be the GraphQL node ID of the comment (the "id"
+// field returned by gh pr view --json comments). reaction must be a valid
+// ReactionContent enum value (e.g. "EYES", "THUMBS_UP", "HEART").
+func ReactToComment(ctx context.Context, exec Executor, commentID string, reaction string) error {
+	const mutation = `mutation($id:ID!,$r:ReactionContent!){addReaction(input:{subjectId:$id,content:$r}){reaction{content}}}`
+	_, err := exec.Run(ctx,
+		"gh", "api", "graphql",
+		"-f", "query="+mutation,
+		"-f", "subjectId="+commentID,
+		"-f", "content="+reaction,
+	)
+	if err != nil {
+		return fmt.Errorf("react to comment: %w", err)
 	}
 	return nil
 }

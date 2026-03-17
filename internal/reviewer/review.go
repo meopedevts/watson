@@ -164,6 +164,11 @@ func (r *Reviewer) processMentionedPRs(ctx context.Context) {
 		}
 
 		r.logger.Info("mention detected, triggering re-review", "pr", rec.PR.Number, "author", mention.Author.Login)
+
+		if err := ghpkg.ReactToComment(ctx, r.executor, mention.ID, "EYES"); err != nil {
+			r.logger.Warn("failed to react to mention comment", "pr", rec.PR.Number, "err", err)
+		}
+
 		if err := r.reviewPRInternal(ctx, rec.PR, &reReviewContext{
 			PreviousReview: rec.Review,
 			MentionComment: mention.Body,
