@@ -30,10 +30,17 @@ func main() {
 	cfg.DryRun = *dryRun
 
 	executor := ghpkg.NewShellExecutor()
-	rev := reviewer.NewReviewer(cfg, executor, logger)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	username, err := ghpkg.ResolveCurrentUser(ctx, executor)
+	if err != nil {
+		log.Fatalf("resolve GitHub user: %v", err)
+	}
+	cfg.GitHubReviewerUsername = username
+
+	rev := reviewer.NewReviewer(cfg, executor, logger)
 
 	interval := time.Duration(cfg.PollIntervalMinutes) * time.Minute
 	ticker := time.NewTicker(interval)

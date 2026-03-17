@@ -53,6 +53,22 @@ func (pr PullRequest) CloneURL(sshHost string) string {
 	return pr.RepoURL()
 }
 
+// ResolveCurrentUser returns the GitHub login of the authenticated user by
+// querying the GitHub API. Call once on startup and store the result in Config.
+//
+//	gh api user --jq .login
+func ResolveCurrentUser(ctx context.Context, exec Executor) (string, error) {
+	out, err := exec.Run(ctx, "gh", "api", "user", "--jq", ".login")
+	if err != nil {
+		return "", fmt.Errorf("gh api user: %w", err)
+	}
+	username := strings.TrimSpace(string(out))
+	if username == "" {
+		return "", fmt.Errorf("gh api user returned empty login")
+	}
+	return username, nil
+}
+
 // ListReviewRequestedPRs fetches all open PRs where the authenticated user is a
 // requested reviewer across all repositories.
 //

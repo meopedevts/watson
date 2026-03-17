@@ -9,8 +9,9 @@ import (
 
 // Config holds all runtime configuration for the watson daemon.
 type Config struct {
-	// GitHubReviewerUsername is the GitHub username whose review requests are polled.
-	// Required — loaded from GITHUB_REVIEWER_USERNAME.
+	// GitHubReviewerUsername is the GitHub login of the authenticated user.
+	// Resolved once on startup via "gh api user" and stored here for the
+	// lifetime of the daemon. Not configurable via env var.
 	GitHubReviewerUsername string
 
 	// PollIntervalMinutes controls how often GitHub is polled.
@@ -62,12 +63,9 @@ type Config struct {
 
 // Load reads configuration from environment variables.
 // Returns an error if any required variable is missing or malformed.
+// GitHubReviewerUsername is not set here — call ResolveCurrentUser after
+// creating the executor and assign the result to cfg.GitHubReviewerUsername.
 func Load() (*Config, error) {
-	username := os.Getenv("GITHUB_REVIEWER_USERNAME")
-	if username == "" {
-		return nil, fmt.Errorf("GITHUB_REVIEWER_USERNAME is required")
-	}
-
 	pollInterval := 15
 	if raw := os.Getenv("POLL_INTERVAL_MINUTES"); raw != "" {
 		v, err := strconv.Atoi(raw)
@@ -100,7 +98,6 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		GitHubReviewerUsername:  username,
 		PollIntervalMinutes:     pollInterval,
 		ClaudeModel:             model,
 		RepoBaseDir:             baseDir,

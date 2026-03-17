@@ -73,13 +73,13 @@ docker compose up -d
 
 ```bash
 # Produção — posta comentários nos PRs
-GITHUB_REVIEWER_USERNAME=seu-usuario ./watson
+GH_TOKEN=... ./watson
 
 # Dry-run — imprime reviews no stdout, sem escrever no GitHub
-GITHUB_REVIEWER_USERNAME=seu-usuario ./watson --dry-run
+GH_TOKEN=... ./watson --dry-run
 
 # Poll a cada 5 minutos
-GITHUB_REVIEWER_USERNAME=seu-usuario POLL_INTERVAL_MINUTES=5 ./watson
+GH_TOKEN=... POLL_INTERVAL_MINUTES=5 ./watson
 ```
 
 Pressione `Ctrl+C` para encerrar o daemon graciosamente.
@@ -90,7 +90,6 @@ Pressione `Ctrl+C` para encerrar o daemon graciosamente.
 
 | Variável | Obrigatória | Padrão | Descrição |
 |----------|:-----------:|--------|-----------|
-| `GITHUB_REVIEWER_USERNAME` | Sim | — | Seu usuário GitHub |
 | `GH_TOKEN` | Sim¹ | — | Classic PAT do GitHub (escopo `repo`) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Sim² | — | OAuth token de longa duração (`claude setup-token`) |
 | `ANTHROPIC_API_KEY` | Sim² | — | API key da Anthropic (alternativa ao OAuth token) |

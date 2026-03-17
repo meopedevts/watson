@@ -73,6 +73,36 @@ func TestPullRequest_CloneURL_SSH(t *testing.T) {
 	}
 }
 
+func TestResolveCurrentUser(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte("watsonrc\n")}}}
+
+	got, err := ResolveCurrentUser(context.Background(), exec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "watsonrc" {
+		t.Errorf("expected %q, got %q", "watsonrc", got)
+	}
+}
+
+func TestResolveCurrentUser_EmptyOutput(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Out: []byte("\n")}}}
+
+	_, err := ResolveCurrentUser(context.Background(), exec)
+	if err == nil {
+		t.Fatal("expected error for empty login, got nil")
+	}
+}
+
+func TestResolveCurrentUser_GhError(t *testing.T) {
+	exec := &MockExecutor{Responses: []MockResponse{{Err: errors.New("gh: auth required")}}}
+
+	_, err := ResolveCurrentUser(context.Background(), exec)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestFindLastWatsonComment_ReturnsLatest(t *testing.T) {
 	comments := []Comment{
 		{Author: CommentAuthor{Login: "watson"}, Body: "first review", CreatedAt: mustParseTime("2026-03-17T10:00:00Z")},

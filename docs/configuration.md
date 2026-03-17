@@ -2,16 +2,6 @@
 
 ## Variáveis de ambiente
 
-### `GITHUB_REVIEWER_USERNAME` (obrigatória)
-
-Usuário GitHub cujos review requests serão monitorados. O daemon busca PRs onde este usuário foi solicitado como reviewer.
-
-```bash
-GITHUB_REVIEWER_USERNAME=seu-usuario ./watson
-```
-
----
-
 ### `POLL_INTERVAL_MINUTES`
 
 Intervalo em minutos entre cada poll do GitHub.
@@ -151,7 +141,6 @@ Em dry-run, todas as etapas são executadas normalmente (clone, diff, Claude, de
 ## Exemplo completo
 
 ```bash
-GITHUB_REVIEWER_USERNAME=seu-usuario \
 POLL_INTERVAL_MINUTES=10 \
 CLAUDE_MODEL=claude-sonnet-4-20250514 \
 REPO_BASE_DIR=/tmp/reviews \
