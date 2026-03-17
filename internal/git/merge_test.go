@@ -42,7 +42,7 @@ func TestCheckConflicts_DetectsConflictFiles(t *testing.T) {
 		{out: []byte(mergeOut), err: errors.New("exit 1")},
 	}}
 
-	files, err := CheckConflicts(context.Background(), exec, "/tmp/fake", "master")
+	files, err := CheckConflicts(context.Background(), exec, t.TempDir(), "master")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestCheckConflicts_NoConflicts(t *testing.T) {
 		{out: []byte("Merge made by the 'ort' strategy."), err: nil},
 	}}
 
-	files, err := CheckConflicts(context.Background(), exec, "/tmp/fake", "master")
+	files, err := CheckConflicts(context.Background(), exec, t.TempDir(), "master")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestCheckConflicts_FetchError(t *testing.T) {
 		{out: nil, err: errors.New("network error")},
 	}}
 
-	_, err := CheckConflicts(context.Background(), exec, "/tmp/fake", "main")
+	_, err := CheckConflicts(context.Background(), exec, t.TempDir(), "main")
 	if err == nil {
 		t.Fatal("expected error from failed fetch")
 	}
