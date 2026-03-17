@@ -69,14 +69,17 @@ Gere sua chave em [console.anthropic.com/settings/keys](https://console.anthropi
 
 ## Autenticação do GitHub CLI
 
-O `gh` CLI autentica via variável de ambiente `GH_TOKEN`. Gere um **Personal Access Token** (clássico ou fine-grained) em [github.com/settings/tokens](https://github.com/settings/tokens).
+O `gh` CLI autentica via variável de ambiente `GH_TOKEN`.
 
-**Escopos mínimos necessários:**
+> **Importante:** use um **classic PAT**, não um fine-grained token. Fine-grained tokens não suportam a mutação GraphQL `addComment` utilizada pelo `gh pr comment`, independentemente das permissões configuradas. Isso é uma limitação conhecida do GitHub.
+
+Gere em [github.com/settings/tokens](https://github.com/settings/tokens) → **"Tokens (classic)"**.
+
+**Escopo mínimo necessário:**
 
 | Escopo | Motivo |
 |--------|--------|
 | `repo` | Listar PRs, ler diffs, postar comentários |
-| `read:org` | Buscar PRs em repositórios de organizações |
 
 ```env
 GH_TOKEN=your-github-token
