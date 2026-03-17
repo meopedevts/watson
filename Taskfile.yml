@@ -1,0 +1,103 @@
+version: "3"
+
+vars:
+  BINARY: pr-reviewer
+  CMD: ./cmd/
+
+env:
+  GITHUB_REVIEWER_USERNAME: '{{.GITHUB_REVIEWER_USERNAME | default ""}}'
+  POLL_INTERVAL_MINUTES: '{{.POLL_INTERVAL_MINUTES | default "15"}}'
+  CLAUDE_MODEL: '{{.CLAUDE_MODEL | default "claude-sonnet-4-20250514"}}'
+  REPO_BASE_DIR: '{{.REPO_BASE_DIR | default "/tmp/pr-reviewer"}}'
+  # GIT_SSH_HOST: opcional. Define um alias SSH do ~/.ssh/config para autenticação.
+  # Ex: GIT_SSH_HOST=github-snk task run  →  clona via git@github-snk:owner/repo.git
+  # Sem esta variável, clona via HTTPS (padrão).
+  GIT_SSH_HOST: '{{.GIT_SSH_HOST | default ""}}'
+
+tasks:
+  # ── build ────────────────────────────────────────────────────────────────
+
+  build:
+    desc: Compila o binário em ./pr-reviewer
+    cmds:
+      - go build -o {{.BINARY}} {{.CMD}}
+    sources:
+      - "**/*.go"
+    generates:
+      - "{{.BINARY}}"
+
+  # ── testes ───────────────────────────────────────────────────────────────
+
+  test:
+    desc: Roda todos os testes unitários
+    cmds:
+      - go test ./...
+
+  test-verbose:
+    desc: Roda testes com saída detalhada
+    cmds:
+      - go test -v ./...
+
+  test-coverage:
+    desc: Gera relatório de cobertura em coverage.html
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Relatório salvo em coverage.html"
+
+  # ── qualidade ────────────────────────────────────────────────────────────
+
+  vet:
+    desc: Roda go vet em todos os pacotes
+    cmds:
+      - go vet ./...
+
+  tidy:
+    desc: Atualiza go.mod e go.sum
+    cmds:
+      - go mod tidy
+
+  check:
+    desc: Vet + testes (roda antes de commitar)
+    cmds:
+      - task: vet
+      - task: test
+
+  # ── execução ─────────────────────────────────────────────────────────────
+
+  run:
+    desc: "Executa em modo produção (posta comentários no GitHub). Requer: GITHUB_REVIEWER_USERNAME"
+    deps: [build]
+    preconditions:
+      - sh: test -n "$GITHUB_REVIEWER_USERNAME"
+        msg: "GITHUB_REVIEWER_USERNAME não definido. Ex: GITHUB_REVIEWER_USERNAME=user task run"
+    cmds:
+      - ./{{.BINARY}}
+
+  dry-run:
+    desc: "Executa sem postar no GitHub — imprime reviews no stdout. Requer: GITHUB_REVIEWER_USERNAME"
+    deps: [build]
+    preconditions:
+      - sh: test -n "$GITHUB_REVIEWER_USERNAME"
+        msg: "GITHUB_REVIEWER_USERNAME não definido. Ex: GITHUB_REVIEWER_USERNAME=user task dry-run"
+    cmds:
+      - ./{{.BINARY}} --dry-run
+
+  dev:
+    desc: "Dry-run com poll de 1 minuto para desenvolvimento. Requer: GITHUB_REVIEWER_USERNAME"
+    deps: [build]
+    preconditions:
+      - sh: test -n "$GITHUB_REVIEWER_USERNAME"
+        msg: "GITHUB_REVIEWER_USERNAME não definido. Ex: GITHUB_REVIEWER_USERNAME=user task dev"
+    env:
+      POLL_INTERVAL_MINUTES: "1"
+    cmds:
+      - ./{{.BINARY}} --dry-run
+
+  # ── limpeza ──────────────────────────────────────────────────────────────
+
+  clean:
+    desc: Remove binário e artefatos de cobertura
+    cmds:
+      - rm -f {{.BINARY}} coverage.out coverage.html
+      - rm -rf /tmp/pr-reviewer
