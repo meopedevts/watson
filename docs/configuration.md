@@ -104,6 +104,36 @@ ssh -T git@<alias>
 
 ---
 
+### `REVIEW_TTL_HOURS`
+
+Tempo em horas que um PR revisado permanece no cache em memória. Após esse período, a entrada é removida: Watson para de verificar menções nesse PR e, se ele ainda estiver aberto com review solicitado, será tratado como novo na próxima vez.
+
+Esse valor controla diretamente o consumo de memória e o volume de chamadas à API do GitHub por tick — uma chamada `gh pr view` por PR em cache para verificação de menções.
+
+- **Padrão:** `168` (7 dias)
+- **Restrição:** deve ser um inteiro positivo
+
+```bash
+REVIEW_TTL_HOURS=48 ./watson   # mantém cache por 2 dias
+```
+
+---
+
+### `RE_REVIEW_COOLDOWN_MINUTES`
+
+Intervalo mínimo em minutos entre dois reviews consecutivos do mesmo PR (primeiro review ou re-review). Menções recebidas dentro dessa janela são ignoradas até o cooldown expirar.
+
+Isso evita spam de comentários quando um PR recebe múltiplas menções em sequência rápida. Recomenda-se configurar um valor maior ou igual a `POLL_INTERVAL_MINUTES`.
+
+- **Padrão:** `60`
+- **Restrição:** deve ser um inteiro positivo
+
+```bash
+RE_REVIEW_COOLDOWN_MINUTES=30 ./watson
+```
+
+---
+
 ## Flag de linha de comando
 
 ### `--dry-run`
@@ -126,6 +156,8 @@ POLL_INTERVAL_MINUTES=10 \
 CLAUDE_MODEL=claude-sonnet-4-20250514 \
 REPO_BASE_DIR=/tmp/reviews \
 GIT_SSH_HOST=meu-alias-ssh \
+REVIEW_TTL_HOURS=168 \
+RE_REVIEW_COOLDOWN_MINUTES=60 \
 ./watson
 ```
 
