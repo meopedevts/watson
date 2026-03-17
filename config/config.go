@@ -22,7 +22,7 @@ type Config struct {
 	ClaudeModel string
 
 	// RepoBaseDir is the parent directory for temporary clone directories.
-	// Loaded from REPO_BASE_DIR; default: os.TempDir()/watson.
+	// Loaded from REPO_BASE_DIR; default: filepath.Join(os.TempDir(), "watson").
 	RepoBaseDir string
 
 	// GitSSHHost is an optional SSH host alias defined in ~/.ssh/config.
