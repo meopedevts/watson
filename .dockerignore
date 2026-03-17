@@ -1,0 +1,10 @@
+.git
+.gitignore
+.idea/
+.task/
+.env
+*.out
+coverage.*
+coverage.html
+watson
+pr-reviewer

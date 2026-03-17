@@ -1,0 +1,13 @@
+services:
+  watson:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+
+    # Uncomment to enable SSH-based git cloning (required when GIT_SSH_HOST is set).
+    # Mount your host SSH config so the container can authenticate via the alias
+    # defined in ~/.ssh/config.
+    #
+    # volumes:
+    #   - ${HOME}/.ssh:/root/.ssh:ro
