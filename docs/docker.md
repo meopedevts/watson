@@ -69,18 +69,34 @@ Gere sua chave em [console.anthropic.com/settings/keys](https://console.anthropi
 
 ## Autenticação do GitHub CLI
 
-O `gh` CLI autentica via variável de ambiente `GH_TOKEN`. Gere um **Personal Access Token** (clássico ou fine-grained) em [github.com/settings/tokens](https://github.com/settings/tokens).
+O `gh` CLI autentica via variável de ambiente `GH_TOKEN`.
 
-**Escopos mínimos necessários:**
+> **Importante:** use um **classic PAT**, não um fine-grained token. Fine-grained tokens não suportam a mutação GraphQL `addComment` utilizada pelo `gh pr comment`, independentemente das permissões configuradas. Isso é uma limitação conhecida do GitHub.
+
+Gere em [github.com/settings/tokens](https://github.com/settings/tokens) → **"Tokens (classic)"**.
+
+**Escopo mínimo necessário:**
 
 | Escopo | Motivo |
 |--------|--------|
 | `repo` | Listar PRs, ler diffs, postar comentários |
-| `read:org` | Buscar PRs em repositórios de organizações |
 
 ```env
 GH_TOKEN=your-github-token
 ```
+
+---
+
+## Identidade Git (opcional)
+
+O watson executa `git merge --no-commit` para detectar conflitos nos PRs. O git exige uma identidade configurada para isso. Defina no `.env`:
+
+```env
+GIT_USER_NAME=Your Name
+GIT_USER_EMAIL=you@example.com
+```
+
+> Essa identidade nunca é enviada ao GitHub — é usada apenas localmente dentro do container durante a detecção de conflitos.
 
 ---
 

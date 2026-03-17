@@ -33,5 +33,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/watson /usr/local/bin/watson
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-ENTRYPOINT ["watson"]
+ENTRYPOINT ["docker-entrypoint.sh"]
