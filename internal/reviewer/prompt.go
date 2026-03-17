@@ -85,7 +85,7 @@ func BuildPrompt(ctx PromptContext) string {
 	sb.WriteString("<melhorias opcionais de refatoração, performance ou legibilidade>\n")
 	sb.WriteString("<ou escreva exatamente: Nenhuma sugestão adicional.>\n\n")
 	sb.WriteString("## Veredicto\n")
-	sb.WriteString("<escolha exatamente um e justifique em uma linha>\n")
+	sb.WriteString("<na resposta final, escreva APENAS UMA das linhas abaixo (✅ ou 🔄 ou 🚫) e não liste as demais opções; substitua <justificativa> por uma frase curta>\n")
 	sb.WriteString("✅ **Aprovado** — <justificativa>\n")
 	sb.WriteString("🔄 **Mudanças necessárias** — <justificativa>\n")
 	sb.WriteString("🚫 **Bloqueado** — <justificativa>")
