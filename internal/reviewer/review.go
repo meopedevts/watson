@@ -46,10 +46,12 @@ func NewReviewer(cfg *config.Config, exec ghpkg.Executor, logger *slog.Logger) *
 	}
 }
 
-// ProcessPendingPRs is called on every ticker tick. It lists pending PRs,
-// launches a goroutine for each one, then checks reviewed PRs for new @mentions.
-// Per-PR errors are logged but do not abort the loop.
+// ProcessPendingPRs is called on every ticker tick. It cleans up stale cache
+// entries, lists pending PRs, launches a goroutine for each one, then checks
+// reviewed PRs for new @mentions. Per-PR errors are logged but do not abort the loop.
 func (r *Reviewer) ProcessPendingPRs(ctx context.Context) error {
+	r.cleanupStaleRecords()
+
 	prs, err := ghpkg.ListPendingPRs(ctx, r.executor, r.processed)
 	if err != nil {
 		return fmt.Errorf("list PRs: %w", err)
@@ -76,14 +78,42 @@ func (r *Reviewer) ProcessPendingPRs(ctx context.Context) error {
 	return nil
 }
 
+// cleanupStaleRecords removes cache entries whose ReviewedAt timestamp has
+// exceeded ReviewTTLHours. This bounds both the memory usage of the processed
+// map and the number of GitHub API calls made per tick for mention checking.
+func (r *Reviewer) cleanupStaleRecords() {
+	ttl := time.Duration(r.cfg.ReviewTTLHours) * time.Hour
+	r.processed.Range(func(key, value any) bool {
+		if rec, ok := value.(reviewRecord); ok && time.Since(rec.ReviewedAt) > ttl {
+			r.processed.Delete(key)
+		}
+		return true
+	})
+}
+
 // processMentionedPRs checks all previously-reviewed PRs for new @mentions.
 // When a mention is found after the last review, a re-review is triggered with
 // the updated diff, the previous review text, and the triggering comment as context.
+//
+// Two checks gate each entry before any API call is made:
+//   - TTL: skip if the entry is older than ReviewTTLHours (will be removed by cleanup)
+//   - Cooldown: skip if the last review happened within ReReviewCooldownMinutes
 func (r *Reviewer) processMentionedPRs(ctx context.Context) {
+	ttl := time.Duration(r.cfg.ReviewTTLHours) * time.Hour
+	cooldown := time.Duration(r.cfg.ReReviewCooldownMinutes) * time.Minute
+
 	r.processed.Range(func(key, value any) bool {
 		rec, ok := value.(reviewRecord)
 		if !ok {
 			return true
+		}
+
+		age := time.Since(rec.ReviewedAt)
+		if age > ttl {
+			return true // stale; will be removed by cleanupStaleRecords on next tick
+		}
+		if age < cooldown {
+			return true // too recent; ignore mentions until cooldown expires
 		}
 
 		comments, err := ghpkg.FetchPRComments(ctx, r.executor, rec.PR.Number, rec.PR.Repository.NameWithOwner)

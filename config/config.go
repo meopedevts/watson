@@ -31,6 +31,30 @@ type Config struct {
 	// Loaded from GIT_SSH_HOST.
 	GitSSHHost string
 
+	// ReviewTTLHours controls how long a reviewed PR stays in the in-memory cache.
+	// After this period, the entry is removed: Watson will no longer check for
+	// @mentions on that PR, and if it is still open and review is requested again,
+	// it will be treated as a new PR.
+	//
+	// This value directly bounds memory usage and the number of GitHub API calls
+	// made per tick for mention checking (one call per cached PR per tick).
+	// Lower values reduce API usage; higher values allow Watson to respond to
+	// mentions on older PRs.
+	//
+	// Default: 168 (7 days). Configurable via REVIEW_TTL_HOURS.
+	ReviewTTLHours int
+
+	// ReReviewCooldownMinutes is the minimum time that must elapse between two
+	// consecutive reviews of the same PR (first-time or re-review). Mentions that
+	// arrive within this window are ignored until the cooldown expires.
+	//
+	// This prevents comment spam when a PR receives multiple @mentions in rapid
+	// succession. Set to a value >= POLL_INTERVAL_MINUTES to ensure at most one
+	// re-review per mention burst.
+	//
+	// Default: 60 minutes. Configurable via RE_REVIEW_COOLDOWN_MINUTES.
+	ReReviewCooldownMinutes int
+
 	// DryRun is set by the --dry-run CLI flag (not an env var).
 	// When true, reviews are printed to stdout instead of posted on GitHub.
 	DryRun bool
@@ -57,12 +81,32 @@ func Load() (*Config, error) {
 	baseDir := getenv("REPO_BASE_DIR", filepath.Join(os.TempDir(), "watson"))
 	sshHost := os.Getenv("GIT_SSH_HOST")
 
+	reviewTTL := 168
+	if raw := os.Getenv("REVIEW_TTL_HOURS"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("REVIEW_TTL_HOURS must be a positive integer, got %q", raw)
+		}
+		reviewTTL = v
+	}
+
+	cooldown := 60
+	if raw := os.Getenv("RE_REVIEW_COOLDOWN_MINUTES"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v <= 0 {
+			return nil, fmt.Errorf("RE_REVIEW_COOLDOWN_MINUTES must be a positive integer, got %q", raw)
+		}
+		cooldown = v
+	}
+
 	return &Config{
-		GitHubReviewerUsername: username,
-		PollIntervalMinutes:    pollInterval,
-		ClaudeModel:            model,
-		RepoBaseDir:            baseDir,
-		GitSSHHost:             sshHost,
+		GitHubReviewerUsername:  username,
+		PollIntervalMinutes:     pollInterval,
+		ClaudeModel:             model,
+		RepoBaseDir:             baseDir,
+		GitSSHHost:              sshHost,
+		ReviewTTLHours:          reviewTTL,
+		ReReviewCooldownMinutes: cooldown,
 	}, nil
 }
 
