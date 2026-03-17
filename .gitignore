@@ -31,5 +31,6 @@ go.work.sum
 watson
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+.task
